@@ -27,6 +27,36 @@ An Intelligent GST Fraud Pattern Detection System designed to identify anomalies
 - **Visuals**: Recharts for data visualization.
 - **Theme**: Premium dark-mode UI with glassmorphism effects.
 
+## 🗄️ Database Schema
+
+```mermaid
+erDiagram
+    INVOICE ||--|| ENGINEERED_FEATURE : "has"
+    INVOICE ||--|| FRAUD_ANALYSIS : "analyzed_by"
+    
+    INVOICE {
+        string invoice_id
+        string seller_gstin
+        string buyer_gstin
+        float invoice_amount
+        datetime invoice_date
+    }
+    
+    ENGINEERED_FEATURE {
+        float tax_ratio
+        float avg_seller_invoice
+        float deviation_from_avg
+        float seller_risk_history
+    }
+    
+    FRAUD_ANALYSIS {
+        float rule_score
+        float ml_score
+        string risk_level
+        datetime analyzed_at
+    }
+```
+
 ## 📊 Project Structure & Data Flow
 
 ```mermaid
