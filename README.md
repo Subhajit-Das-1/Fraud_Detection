@@ -1,7 +1,5 @@
 # GST Fraud Detection System (GST Shield)
 
-![Dashboard Overview](C:\Users\ssubh\.gemini\antigravity\brain\0da96296-c959-455c-87c0-a28413ba479d\dashboard_overview_1772464038533.png)
-
 An Intelligent GST Fraud Pattern Detection System designed to identify anomalies, evaluate risk, and visualize potential fraud in GST invoices using Rule-based validation and Machine Learning (Isolation Forest).
 
 ## 🚀 Features
