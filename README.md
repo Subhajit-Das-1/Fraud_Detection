@@ -27,6 +27,28 @@ An Intelligent GST Fraud Pattern Detection System designed to identify anomalies
 - **Visuals**: Recharts for data visualization.
 - **Theme**: Premium dark-mode UI with glassmorphism effects.
 
+## 📊 Project Structure & Data Flow
+
+```mermaid
+graph TD
+    subgraph "Frontend (Next.js)"
+        UI[Dashboard UI] --> Actions[User Actions / Hooks]
+        Actions --> API_Call[Fetch / Axios]
+    end
+
+    subgraph "Backend (FastAPI)"
+        API_Call --> Router[API Endpoints]
+        Router --> RuleEngine[Rule Engine]
+        Router --> MLEngine[ML Anomaly Detector]
+        RuleEngine --> Scorer[Risk Scorer]
+        MLEngine --> Scorer
+        Scorer --> DB[(SQLite Database)]
+        DB --> Router
+    end
+
+    Router --> UI
+```
+
 ## 🛠️ Setup Instructions
 
 ### Backend
