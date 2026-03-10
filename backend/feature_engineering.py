@@ -79,14 +79,25 @@ def compute_all_features(db: Session, invoices: list[Invoice]) -> list[Engineere
     """Compute features for a batch of invoices."""
     features = []
     for inv in invoices:
-        # Remove existing feature if any
+        # Compute new features
+        feat_data = compute_features(db, inv)
+        
+        # Check for existing feature
         existing = db.query(EngineeredFeature).filter(EngineeredFeature.invoice_id == inv.id).first()
         if existing:
-            db.delete(existing)
-
-        feat = compute_features(db, inv)
-        db.add(feat)
-        features.append(feat)
+            # Update existing record
+            existing.tax_ratio = feat_data.tax_ratio
+            existing.avg_seller_invoice = feat_data.avg_seller_invoice
+            existing.deviation_from_avg = feat_data.deviation_from_avg
+            existing.transaction_frequency = feat_data.transaction_frequency
+            existing.seller_risk_history = feat_data.seller_risk_history
+            existing.buyer_risk_history = feat_data.buyer_risk_history
+            existing.invoice_time_gap = feat_data.invoice_time_gap
+            features.append(existing)
+        else:
+            # Add new record
+            db.add(feat_data)
+            features.append(feat_data)
 
     db.commit()
     return features

@@ -56,12 +56,14 @@ def generate_synthetic_data(db: Session, count: int = 500) -> dict:
     fraud_count = 0
 
     for i in range(count):
-        is_fraud = random.random() < 0.15
-        fraud_type = None
+        is_fraud = random.random() < 0.50  # 50% probability
+        fraud_types = []
 
         if is_fraud:
-            fraud_type = random.choice(["tax_mismatch", "duplicate", "circular",
-                                         "invalid_gstin", "abnormal_ratio", "high_frequency"])
+            # Pick 1-3 fraud types to ensure higher risk scores
+            num_patterns = random.choice([1, 1, 2, 3]) 
+            fraud_types = random.sample(["tax_mismatch", "duplicate", "circular",
+                                         "invalid_gstin", "abnormal_ratio", "high_frequency"], k=num_patterns)
             fraud_count += 1
 
         # Base invoice
@@ -70,7 +72,7 @@ def generate_synthetic_data(db: Session, count: int = 500) -> dict:
         while buyer == seller:
             buyer = random.choice(buyer_pool)
 
-        amount = round(random.uniform(1000, 500000), 2)
+        amount = round(random.uniform(100000, 2000000), 2)  # Even higher amounts
         date = start_date + timedelta(days=random.randint(0, 365))
 
         # Normal tax calculation (18%)
@@ -89,51 +91,41 @@ def generate_synthetic_data(db: Session, count: int = 500) -> dict:
         hsn = random.choice(HSN_CODES)
 
         # Apply fraud patterns
-        if fraud_type == "tax_mismatch":
-            # Significantly wrong tax
-            multiplier = random.choice([0.01, 0.05, 0.35, 0.50])
-            if igst > 0:
-                igst = round(amount * multiplier, 2)
-            else:
-                cgst = round(amount * multiplier / 2, 2)
-                sgst = round(amount * multiplier / 2, 2)
+        for f_type in fraud_types:
+            if f_type == "tax_mismatch":
+                multiplier = random.choice([0.00, 0.40, 0.70, 0.95, 2.00]) 
+                if igst > 0:
+                    igst = round(amount * multiplier, 2)
+                else:
+                    cgst = round(amount * multiplier / 2, 2)
+                    sgst = round(amount * multiplier / 2, 2)
 
-        elif fraud_type == "duplicate":
-            # Use an existing invoice's ID
-            if invoices:
-                existing = random.choice(invoices)
-                invoice_id = existing["invoice_id"]
-                seller = existing["seller_gstin"]
-                buyer = existing["buyer_gstin"]
+            elif f_type == "duplicate":
+                if invoices:
+                    existing = random.choice(invoices)
+                    invoice_id = existing["invoice_id"]
+                    seller = existing["seller_gstin"]
+                    buyer = existing["buyer_gstin"]
 
-        elif fraud_type == "circular":
-            # Swap seller/buyer to create circular pattern
-            if invoices:
-                existing = random.choice(invoices[-20:])
-                seller = existing["buyer_gstin"]
-                buyer = existing["seller_gstin"]
+            elif f_type == "circular":
+                if invoices:
+                    existing = random.choice(invoices[-100:])
+                    seller = existing["buyer_gstin"]
+                    buyer = existing["seller_gstin"]
 
-        elif fraud_type == "invalid_gstin":
-            if random.random() < 0.5:
-                seller = _generate_gstin(False)
-            else:
-                buyer = _generate_gstin(False)
+            elif f_type == "invalid_gstin":
+                seller = "INV-GST-ERR-000"
+                buyer = "FAKE-TAX-ID-999"
 
-        elif fraud_type == "abnormal_ratio":
-            # Very high or zero tax
-            if random.random() < 0.5:
-                cgst = round(amount * 0.25, 2)
-                sgst = round(amount * 0.25, 2)
-                igst = 0.0
-            else:
-                cgst = 0.0
-                sgst = 0.0
+            elif f_type == "abnormal_ratio":
+                cgst = round(amount * 0.80, 2)
+                sgst = round(amount * 0.80, 2)
                 igst = 0.0
 
-        elif fraud_type == "high_frequency":
-            # Use same seller for many invoices in short period
-            seller = seller_pool[0]  # Always use first seller
-            date = start_date + timedelta(days=random.randint(0, 15))
+            elif f_type == "high_frequency":
+                seller = seller_pool[0]
+                buyer = buyer_pool[0]
+                date = start_date + timedelta(days=random.randint(200, 205))
 
         inv_data = {
             "invoice_id": invoice_id,
