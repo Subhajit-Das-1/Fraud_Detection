@@ -33,6 +33,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -73,6 +75,16 @@ export default function Dashboard() {
     setAnalyzing(false);
   };
 
+  const resetData = async () => {
+    setResetting(true);
+    try {
+      await fetch(`${API}/api/reset-data`, { method: "DELETE" });
+      setShowResetModal(false);
+      await fetchData();
+    } catch (e) { console.error(e); }
+    setResetting(false);
+  };
+
   if (loading) return (
     <div className="loading-container">
       <div className="spinner"></div>
@@ -97,6 +109,9 @@ export default function Dashboard() {
         </button>
         <button className="btn btn-secondary" onClick={fetchData}>
           🔄 Refresh
+        </button>
+        <button className="btn btn-danger" onClick={() => setShowResetModal(true)} disabled={resetting}>
+          🗑️ Reset All Data
         </button>
       </div>
 
@@ -258,6 +273,36 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Reset Confirmation Modal */}
+      {showResetModal && (
+        <div className="modal-overlay" onClick={() => !resetting && setShowResetModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-icon">⚠️</div>
+            <h3 className="modal-title">Reset All Data?</h3>
+            <p className="modal-desc">
+              This will permanently delete <strong>all invoices</strong>, <strong>engineered features</strong>,
+              <strong> fraud analyses</strong>, and the <strong>trained ML model</strong>. This action cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowResetModal(false)}
+                disabled={resetting}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={resetData}
+                disabled={resetting}
+              >
+                {resetting ? "⏳ Deleting..." : "🗑️ Yes, Delete Everything"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
