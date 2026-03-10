@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { api } from "@/lib/api";
 
 interface InvoiceItem {
     id: number;
@@ -40,8 +40,7 @@ export default function InvoicesPage() {
             const params = new URLSearchParams();
             if (search) params.set("search", search);
             if (filter) params.set("risk_level", filter);
-            const res = await fetch(`${API}/api/invoices?${params}&limit=100`);
-            const data = await res.json();
+            const data = await api.get<{ invoices: InvoiceItem[] }>(`/api/invoices?${params}&limit=100`);
             setInvoices(data.invoices || []);
         } catch (e) { console.error(e); }
         setLoading(false);
@@ -55,8 +54,7 @@ export default function InvoicesPage() {
         const fd = new FormData();
         fd.append("file", file);
         try {
-            const res = await fetch(`${API}/api/invoices/upload-csv`, { method: "POST", body: fd });
-            const data = await res.json();
+            const data = await api.post<{ uploaded: number, errors: any[] }>("/api/invoices/upload-csv", fd);
             setUploadMsg(`✅ Uploaded ${data.uploaded} invoices. ${data.errors?.length || 0} errors.`);
             fetchInvoices();
         } catch (e) {
@@ -76,11 +74,7 @@ export default function InvoicesPage() {
                 igst: parseFloat(form.igst) || 0,
                 invoice_date: form.invoice_date ? new Date(form.invoice_date).toISOString() : null,
             };
-            await fetch(`${API}/api/invoices`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body),
-            });
+            await api.post("/api/invoices", body);
             setForm({ invoice_id: "", seller_gstin: "", buyer_gstin: "", invoice_amount: "", cgst: "", sgst: "", igst: "", hsn_code: "", invoice_date: "" });
             setTab("list");
             fetchInvoices();

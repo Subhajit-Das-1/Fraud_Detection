@@ -7,22 +7,28 @@ import csv
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Query
+from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, extract
 
 from database import engine, get_db, Base
-from models import Invoice, EngineeredFeature, FraudAnalysis
+from models import Invoice, EngineeredFeature, FraudAnalysis, User
 from schemas import (
     InvoiceCreate, InvoiceResponse, InvoiceDetailResponse, InvoiceListItem,
-    DashboardStats, RiskDistribution, RiskTrend, SellerHeatmapItem
+    DashboardStats, RiskDistribution, RiskTrend, SellerHeatmapItem,
+    UserCreate, UserResponse, Token
 )
 from rule_engine import run_all_rules
 from feature_engineering import compute_all_features
 from ml_engine import train_model, predict_anomaly, load_model
 from risk_scorer import compute_final_score
 from generate_data import generate_synthetic_data
+from auth import (
+    get_password_hash, verify_password, create_access_token,
+    get_current_active_user, get_current_admin_user
+)
+from fastapi.security import OAuth2PasswordRequestForm
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -42,10 +48,57 @@ app.add_middleware(
 )
 
 
+# ========== Auth Endpoints ==========
+
+@app.post("/api/auth/register", response_model=UserResponse)
+def register(user: UserCreate, db: Session = Depends(get_db)):
+    """Register a new user."""
+    db_user = db.query(User).filter(User.username == user.username).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    
+    hashed_pwd = get_password_hash(user.password)
+    db_user = User(
+        username=user.username,
+        email=user.email,
+        hashed_password=hashed_pwd,
+        is_admin=1 if db.query(User).count() == 0 else 0  # First user is admin
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+@app.post("/api/auth/login", response_model=Token)
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """Login and get access token."""
+    user = db.query(User).filter(User.username == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token = create_access_token(data={"sub": user.username})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.get("/api/auth/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_active_user)):
+    """Get current user info."""
+    return current_user
+
+
 # ========== Invoice Endpoints ==========
 
 @app.post("/api/invoices", response_model=InvoiceResponse)
-def create_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
+def create_invoice(
+    invoice: InvoiceCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """Create a single invoice via manual entry."""
     db_invoice = Invoice(
         invoice_id=invoice.invoice_id,
@@ -65,7 +118,11 @@ def create_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/api/invoices/upload-csv")
-def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def upload_csv(
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """Upload invoices via CSV file."""
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are accepted")
@@ -98,7 +155,11 @@ def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
 
 
 @app.post("/api/invoices/bulk")
-def bulk_create(invoices: list[InvoiceCreate], db: Session = Depends(get_db)):
+def bulk_create(
+    invoices: list[InvoiceCreate], 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """Bulk create invoices via JSON array."""
     created = []
     for inv_data in invoices:
@@ -125,7 +186,8 @@ def list_invoices(
     limit: int = 50,
     risk_level: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """List invoices with optional filtering."""
     query = db.query(Invoice)
@@ -165,7 +227,11 @@ def list_invoices(
 
 
 @app.get("/api/invoices/{invoice_id}")
-def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
+def get_invoice(
+    invoice_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """Get detailed invoice with features and analysis."""
     inv = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not inv:
@@ -212,7 +278,10 @@ def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
 # ========== Fraud Analysis Endpoints ==========
 
 @app.post("/api/analyze")
-def analyze_invoices(db: Session = Depends(get_db)):
+def analyze_invoices(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
     """Run the full fraud detection pipeline on all invoices."""
     invoices = db.query(Invoice).all()
     if not invoices:
@@ -271,7 +340,10 @@ def analyze_invoices(db: Session = Depends(get_db)):
 
 
 @app.post("/api/train-model")
-def retrain_model(db: Session = Depends(get_db)):
+def retrain_model(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
     """Retrain the Isolation Forest model."""
     try:
         model = train_model(db)
@@ -283,7 +355,11 @@ def retrain_model(db: Session = Depends(get_db)):
 # ========== Data Generation ==========
 
 @app.post("/api/generate-data")
-def generate_data(count: int = 500, db: Session = Depends(get_db)):
+def generate_data(
+    count: int = 500, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
     """Generate synthetic GST dataset."""
     result = generate_synthetic_data(db, count)
     return result
@@ -292,7 +368,10 @@ def generate_data(count: int = 500, db: Session = Depends(get_db)):
 # ========== Dashboard Endpoints ==========
 
 @app.get("/api/dashboard/stats")
-def dashboard_stats(db: Session = Depends(get_db)):
+def dashboard_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """Overview statistics."""
     total = db.query(Invoice).count()
 
@@ -323,7 +402,10 @@ def dashboard_stats(db: Session = Depends(get_db)):
 
 
 @app.get("/api/dashboard/risk-distribution")
-def risk_distribution(db: Session = Depends(get_db)):
+def risk_distribution(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """Risk level distribution."""
     results = db.query(
         FraudAnalysis.risk_level,
@@ -334,7 +416,10 @@ def risk_distribution(db: Session = Depends(get_db)):
 
 
 @app.get("/api/dashboard/risk-trend")
-def risk_trend(db: Session = Depends(get_db)):
+def risk_trend(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """Daily risk trend over time."""
     results = db.query(
         func.date(Invoice.invoice_date).label("date"),
@@ -357,7 +442,10 @@ def risk_trend(db: Session = Depends(get_db)):
 
 
 @app.get("/api/dashboard/seller-heatmap")
-def seller_heatmap(db: Session = Depends(get_db)):
+def seller_heatmap(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """Seller risk heatmap data."""
     results = db.query(
         Invoice.seller_gstin,

@@ -7,7 +7,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { api } from "@/lib/api";
 
 interface InvoiceDetail {
     invoice: {
@@ -35,8 +35,7 @@ export default function InvoiceDetailPage() {
 
     useEffect(() => {
         if (!id) return;
-        fetch(`${API}/api/invoices/${id}`)
-            .then(r => r.json())
+        api.get<InvoiceDetail>(`/api/invoices/${id}`)
             .then(setData)
             .catch(console.error)
             .finally(() => setLoading(false));

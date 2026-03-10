@@ -52,5 +52,16 @@ class FraudAnalysis(Base):
     final_score = Column(Float, default=0.0)
     risk_level = Column(String(10), default="Low")
     analyzed_at = Column(DateTime, default=datetime.utcnow)
-
     invoice = relationship("Invoice", back_populates="analysis")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    username = Column(String(50), unique=True, index=True)
+    email = Column(String(100), unique=True, index=True)
+    hashed_password = Column(String(200))
+    is_active = Column(Integer, default=1)  # 1=True, 0=False
+    is_admin = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -7,7 +7,7 @@ import {
   ScatterChart, Scatter, ZAxis,
 } from "recharts";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { api } from "@/lib/api";
 
 const RISK_COLORS: Record<string, string> = {
   High: "#ef4444",
@@ -38,10 +38,10 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const [s, d, t, h] = await Promise.all([
-        fetch(`${API}/api/dashboard/stats`).then(r => r.json()),
-        fetch(`${API}/api/dashboard/risk-distribution`).then(r => r.json()),
-        fetch(`${API}/api/dashboard/risk-trend`).then(r => r.json()),
-        fetch(`${API}/api/dashboard/seller-heatmap`).then(r => r.json()),
+        api.get<Stats>("/api/dashboard/stats"),
+        api.get<any[]>("/api/dashboard/risk-distribution"),
+        api.get<any[]>("/api/dashboard/risk-trend"),
+        api.get<any[]>("/api/dashboard/seller-heatmap"),
       ]);
       setStats(s);
       setRiskDist(d);
@@ -58,7 +58,7 @@ export default function Dashboard() {
   const generateData = async () => {
     setGenerating(true);
     try {
-      await fetch(`${API}/api/generate-data`, { method: "POST" });
+      await api.post("/api/generate-data");
       await fetchData();
     } catch (e) { console.error(e); }
     setGenerating(false);
@@ -67,7 +67,7 @@ export default function Dashboard() {
   const runAnalysis = async () => {
     setAnalyzing(true);
     try {
-      await fetch(`${API}/api/analyze`, { method: "POST" });
+      await api.post("/api/analyze");
       await fetchData();
     } catch (e) { console.error(e); }
     setAnalyzing(false);
@@ -240,9 +240,9 @@ export default function Dashboard() {
                     color: "#f1f5f9",
                     fontSize: "13px",
                   }}
-                  formatter={(value: any, name: string) => {
+                  formatter={(value: any, name?: string) => {
                     if (name === "Total Amount") return [`₹${Number(value).toLocaleString()}`, name];
-                    return [value, name];
+                    return [value, name || ""];
                   }}
                   labelFormatter={(label: any) => `GSTIN: ${label}`}
                 />
