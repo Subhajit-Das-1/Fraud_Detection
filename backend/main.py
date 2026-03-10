@@ -365,6 +365,32 @@ def generate_data(
     return result
 
 
+# ========== Data Reset ==========
+
+@app.delete("/api/reset-data")
+def reset_data(db: Session = Depends(get_db)):
+    """Delete all generated data from the database."""
+    import os
+
+    # Delete in correct order for FK constraints
+    fa_count = db.query(FraudAnalysis).delete()
+    ef_count = db.query(EngineeredFeature).delete()
+    inv_count = db.query(Invoice).delete()
+    db.commit()
+
+    # Remove trained model file
+    model_path = os.path.join(os.path.dirname(__file__), "isolation_forest_model.pkl")
+    if os.path.exists(model_path):
+        os.remove(model_path)
+
+    return {
+        "deleted_invoices": inv_count,
+        "deleted_features": ef_count,
+        "deleted_analyses": fa_count,
+        "message": "All data has been reset successfully",
+    }
+
+
 # ========== Dashboard Endpoints ==========
 
 @app.get("/api/dashboard/stats")
