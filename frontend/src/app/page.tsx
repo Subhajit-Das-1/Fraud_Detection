@@ -78,7 +78,7 @@ export default function Dashboard() {
   const resetData = async () => {
     setResetting(true);
     try {
-      await fetch(`${API}/api/reset-data`, { method: "DELETE" });
+      await api.delete("/api/reset-data");
       setShowResetModal(false);
       await fetchData();
     } catch (e) { console.error(e); }
